@@ -2,8 +2,7 @@ import datetime
 
 import requests
 from waste_collection_schedule import Collection
-
-VERSION = "1.0.0"
+from waste_collection_schedule.exceptions import SourceArgumentNotFound
 
 TITLE = "Métropole de Lyon"
 DESCRIPTION = "Source script for data.grandlyon.com waste collection schedules"
@@ -13,7 +12,9 @@ COUNTRY = "fr"
 TEST_CASES = {
     "Oullins centre": {"address": "1 place Roger Salengro, Oullins"},
     "Lyon 3e Garibaldi": {"address": "208 rue Garibaldi, Lyon 3e"},
-    "Villeurbanne Gratte-Ciel": {"address": "18 rue Francis de Pressensé, Villeurbanne"},
+    "Villeurbanne Gratte-Ciel": {
+        "address": "18 rue Francis de Pressensé, Villeurbanne"
+    },
 }
 
 ICON_MAP = {
@@ -64,9 +65,12 @@ class Source:
         lat, lon = self._geocode(self._address)
 
         bbox = (
-            str(lon - SEARCH_RADIUS_DEG) + ","
-            + str(lat - SEARCH_RADIUS_DEG) + ","
-            + str(lon + SEARCH_RADIUS_DEG) + ","
+            str(lon - SEARCH_RADIUS_DEG)
+            + ","
+            + str(lat - SEARCH_RADIUS_DEG)
+            + ","
+            + str(lon + SEARCH_RADIUS_DEG)
+            + ","
             + str(lat + SEARCH_RADIUS_DEG)
         )
         resp = requests.get(
@@ -88,15 +92,7 @@ class Source:
 
         features = data.get("features", [])
         if not features:
-            raise Exception(
-                "No collection circuits found near '"
-                + self._address
-                + "' (geocoded to "
-                + str(round(lat, 6))
-                + ", "
-                + str(round(lon, 6))
-                + ")."
-            )
+            raise SourceArgumentNotFound("address", self._address)
 
         # For each waste type, keep only the CLOSEST circuit
         # to avoid merging days from neighbouring streets
@@ -123,9 +119,7 @@ class Source:
                 best_per_type[waste_type] = (dist, days)
 
         if not best_per_type:
-            raise Exception(
-                "Found circuit data but could not extract collection days."
-            )
+            raise SourceArgumentNotFound("address", self._address)
 
         # Generate ALL dates (framework handles filtering)
         now = datetime.date.today()
@@ -193,8 +187,4 @@ class Source:
         except Exception:
             pass
 
-        raise Exception(
-            "Could not geocode address: '"
-            + address
-            + "'. Please check the spelling and include the city name."
-        )
+        raise SourceArgumentNotFound("address", address)
