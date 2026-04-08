@@ -2,7 +2,10 @@ import datetime
 
 import requests
 from waste_collection_schedule import Collection
-from waste_collection_schedule.exceptions import SourceArgumentNotFound
+from waste_collection_schedule.exceptions import (
+    SourceArgumentNotFound,
+    SourceArgumentRequired,
+)
 
 TITLE = "Métropole de Lyon"
 DESCRIPTION = "Source script for data.grandlyon.com waste collection schedules"
@@ -59,7 +62,10 @@ DAY_COLUMNS = {
 
 class Source:
     def __init__(self, address):
-        self._address = address.strip()
+        normalized = address.strip() if isinstance(address, str) else address
+        if not normalized:
+            raise SourceArgumentRequired("address")
+        self._address = normalized
 
     def fetch(self):
         lat, lon = self._geocode(self._address)
