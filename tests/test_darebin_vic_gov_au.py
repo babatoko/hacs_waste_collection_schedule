@@ -17,7 +17,12 @@ sys.path.insert(
     ),
 )
 
+from waste_collection_schedule.service import ArcGis
 from waste_collection_schedule.source import darebin_vic_gov_au
+
+# Darebin's date selection (get_next_n_dates / most_recent_weekday) now lives
+# in the shared ArcGis service (used by ~20 other sources), not in
+# darebin_vic_gov_au itself. These tests exercise it through that module.
 
 
 class FixedDate(date):
@@ -28,13 +33,13 @@ class FixedDate(date):
 
 
 def test_past_date_moves_forward(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     start_date = date(2025, 8, 1)
     n = 2
     delta = timedelta(days=7)
     expected = [date(2025, 8, 15), date(2025, 8, 22)]
 
-    results = darebin_vic_gov_au._get_next_n_dates(start_date, n, delta)
+    results = ArcGis.get_next_n_dates(start_date, n, delta)
     assert results == expected, (
         f"Expected dates {expected} for start_date={start_date}, "
         f"n={n}, delta={delta}, but got {results}"
@@ -42,13 +47,13 @@ def test_past_date_moves_forward(monkeypatch):
 
 
 def test_start_date_is_today(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     start_date = date(2025, 8, 9)
     n = 2
     delta = timedelta(days=7)
     expected = [date(2025, 8, 9), date(2025, 8, 16)]
 
-    results = darebin_vic_gov_au._get_next_n_dates(start_date, n, delta)
+    results = ArcGis.get_next_n_dates(start_date, n, delta)
     assert results == expected, (
         f"Expected {expected} for start_date={start_date}, "
         f"n={n}, delta={delta}, but got {results}"
@@ -56,13 +61,13 @@ def test_start_date_is_today(monkeypatch):
 
 
 def test_start_date_after_today_no_skip(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     start_date = date(2025, 8, 15)
     n = 2
     delta = timedelta(days=14)
     expected = [date(2025, 8, 15), date(2025, 8, 29)]
 
-    results = darebin_vic_gov_au._get_next_n_dates(start_date, n, delta)
+    results = ArcGis.get_next_n_dates(start_date, n, delta)
     assert results == expected, (
         f"Expected {expected} for start_date={start_date}, "
         f"n={n}, delta={delta}, but got {results}"
@@ -70,13 +75,13 @@ def test_start_date_after_today_no_skip(monkeypatch):
 
 
 def test_multiple_weeks_ahead(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     start_date = date(2025, 9, 1)
     n = 3
     delta = timedelta(weeks=6)
     expected = [date(2025, 9, 1), date(2025, 10, 13), date(2025, 11, 24)]
 
-    results = darebin_vic_gov_au._get_next_n_dates(start_date, n, delta)
+    results = ArcGis.get_next_n_dates(start_date, n, delta)
     assert results == expected, (
         f"Expected {expected} for start_date={start_date}, "
         f"n={n}, delta={delta}, but got {results}"
@@ -84,105 +89,91 @@ def test_multiple_weeks_ahead(monkeypatch):
 
 
 def test_future_date_less_than_delta(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     start_date = date(2025, 8, 15)
     n = 2
     delta = timedelta(days=14)
     expected = [date(2025, 8, 15), date(2025, 8, 29)]
 
-    results = darebin_vic_gov_au._get_next_n_dates(start_date, n, delta)
+    results = ArcGis.get_next_n_dates(start_date, n, delta)
     assert results == expected, (
         f"Expected {expected} for start_date={start_date}, "
         f"n={n}, delta={delta}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_monday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_monday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Monday"
     expected = date(2025, 8, 4)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_tuesday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_tuesday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Tuesday"
     expected = date(2025, 8, 5)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_wednesday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_wednesday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Wednesday"
     expected = date(2025, 8, 6)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_thursday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_thursday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Thursday"
     expected = date(2025, 8, 7)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_friday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_friday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Friday"
     expected = date(2025, 8, 8)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_saturday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_saturday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Saturday"
     expected = date(2025, 8, 9)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day}, but got {results}"
     )
 
 
-def test_get_previous_date_for_day_of_week_sunday(monkeypatch):
-    monkeypatch.setattr(darebin_vic_gov_au, "date", FixedDate)
+def test_most_recent_weekday_sunday(monkeypatch):
+    monkeypatch.setattr(ArcGis, "date", FixedDate)
     collection_day = "Sunday"
     expected = date(2025, 8, 3)
 
-    results = darebin_vic_gov_au._get_previous_date_for_day_of_week(
-        darebin_vic_gov_au.WEEKDAY_MAP[collection_day]
-    )
+    results = ArcGis.most_recent_weekday(darebin_vic_gov_au.WEEKDAY_MAP[collection_day])
     assert results == expected, (
         f"Expected {expected} for day_of_week={collection_day},  but got {results}"
     )

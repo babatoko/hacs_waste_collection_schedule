@@ -1,11 +1,5 @@
 """
 Unit tests for Colchester City Council waste collection source.
-
-Note: This test file is not auto-discovered by pytest due to pytest.ini configuration
-(python_files = test_source_components.py). Run it explicitly:
-
-    pytest tests/test_colchester_gov_uk.py
-    pytest tests/test_colchester_gov_uk.py -v
 """
 
 import json
@@ -33,11 +27,19 @@ from waste_collection_schedule.source import colchester_gov_uk
 
 
 class MockResponse:
-    """Minimal requests.Response stand-in (the source reads .text)."""
+    """Minimal requests.Response stand-in (the source calls .raise_for_status()
+    then .json())."""
 
     def __init__(self, payload):
+        self._payload = payload
         self.text = json.dumps(payload)
         self.status_code = 200
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
 
 
 class FrozenDatetime(datetime):

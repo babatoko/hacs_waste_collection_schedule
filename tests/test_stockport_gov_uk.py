@@ -16,6 +16,7 @@ sys.path.append(
     )
 )
 
+from waste_collection_schedule import Icons
 from waste_collection_schedule.source import stockport_gov_uk
 
 # Sample HTML that mimics the Stockport council website structure
@@ -151,10 +152,10 @@ def test_correct_icons_assigned(source):
 
     entries_by_type = {e.type: e.icon for e in entries}
 
-    assert entries_by_type["Green bin"] == "mdi:leaf"
-    assert entries_by_type["Black bin"] == "mdi:trash-can"
-    assert entries_by_type["Blue bin"] == "mdi:recycle"
-    assert entries_by_type["Brown bin"] == "mdi:glass-fragile"
+    assert entries_by_type["Green bin"] == Icons.ORGANIC
+    assert entries_by_type["Black bin"] == Icons.GENERAL_WASTE
+    assert entries_by_type["Blue bin"] == Icons.RECYCLING
+    assert entries_by_type["Brown bin"] == Icons.GLASS
 
 
 # =============================================================================
@@ -247,8 +248,12 @@ def test_uprn_used_in_url(source):
         mock_get.return_value = MockResponse(SAMPLE_HTML)
         source.fetch()
 
-    mock_get.assert_called_once_with(
-        "https://myaccount.stockport.gov.uk/bin-collections/show/100011501705"
+    # Only assert on the URL: the source also sends a browser User-Agent and
+    # a timeout (added to work around a 403 from the endpoint, see #6618),
+    # which aren't what this test is about.
+    mock_get.assert_called_once()
+    assert mock_get.call_args.args == (
+        "https://myaccount.stockport.gov.uk/bin-collections/show/100011501705",
     )
 
 

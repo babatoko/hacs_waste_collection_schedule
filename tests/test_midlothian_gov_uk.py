@@ -5,6 +5,7 @@ Test for Midlothian Council waste collection source.
 import os
 import sys
 from datetime import date
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -29,113 +30,90 @@ from waste_collection_schedule.source import midlothian_gov_uk
 TEST_UPRN = "120001401"
 TEST_POSTCODE = "EH26 8AG"
 
-
-@pytest.fixture(scope="module")
-def collections():
-    """Fixture that fetches collections once and shares across all tests."""
-    source = midlothian_gov_uk.Source(uprn=TEST_UPRN, postcode=TEST_POSTCODE)
-    return source.fetch()
-
-
-def test_fetch_returns_collections(collections):
-    """Test that fetch returns a non-empty list of collections."""
-    assert collections is not None
-    assert isinstance(collections, list)
-    assert len(collections) > 0
+# The AchieveForms-style flow behind this source: an auth call that hands
+# back a session id, a domain lookup that's fetched but otherwise ignored,
+# and a runLookup POST whose "rows_data" holds the actual collections.
+ROWS_DATA = {
+    "0": {"Date": "27/04/2026 00:00:00", "Service": "Food Collection Service"},
+    "1": {"Date": "27/04/2026 00:00:00", "Service": "Residual Collection Service"},
+    "2": {"Date": "04/05/2026 00:00:00", "Service": "Garden Collection Service"},
+}
 
 
-def test_collections_have_required_fields(collections):
-    """Test that each collection has date, type, and icon fields."""
-    for collection in collections:
-        assert collection.date is not None, "Collection date should not be None"
-        assert collection.type is not None, "Collection type should not be None"
-        assert collection.icon is not None, "Collection icon should not be None"
+def _response(json_data=None, status_code=200):
+    response = MagicMock()
+    response.status_code = status_code
+    response.raise_for_status = MagicMock()
+    response.json.return_value = json_data
+    return response
 
 
-def test_collection_dates_are_valid(collections):
-    """Test that collection dates are valid date objects and within a reasonable range."""
-    # Given
-    today = date.today()
-    from datetime import timedelta
-
-    # Allow a 1-day grace period to handle timezone edge cases and collections
-    # that occur "today" but may have already passed when the test runs
-    earliest_allowed = today - timedelta(days=1)
-    # Verify we're not getting data too far in the future (sanity check)
-    latest_allowed = today + timedelta(days=400)  # ~13 months
-
-    # Assert all collection dates are valid date objects
-    for collection in collections:
-        assert isinstance(collection.date, date), (
-            "Collection date should be a date object"
-        )
-        assert earliest_allowed <= collection.date <= latest_allowed, (
-            f"Collection date {collection.date} is outside reasonable range "
-            f"({earliest_allowed} to {latest_allowed})"
-        )
-
-    # Group collections by type
-    from collections import defaultdict
-
-    type_to_dates = defaultdict(list)
-    for collection in collections:
-        type_to_dates[collection.type].append(collection.date)
-
-    # For each type, verify we have at least one upcoming collection
-    # Note: Midlothian API returns collections from today onwards (we pass fromDate=today),
-    # so we expect dates >= today, but allow a 1-day grace period for edge cases
-    for ctype, dates in type_to_dates.items():
-        soonest = min(dates)
-        assert soonest >= earliest_allowed, (
-            f"Soonest collection date for {ctype} is unexpectedly old: {soonest}"
-        )
-
-
-def test_collection_types_are_recognized(collections):
-    """Test that collection types match expected waste types."""
-    # Given
-    expected_types = {
-        "Food Collection Service",
-        "Glass Collection Service",
-        "Residual Collection Service",
-        "Garden Collection Service",
-        "Recycling Collection Service",
-        "Card Collection Service",
-    }
-
-    # When
-    collection_types = {c.type for c in collections}
-
-    # Then
-    assert collection_types.issubset(expected_types), (
-        f"Unexpected collection types found: {collection_types - expected_types}"
+def _mock_session(rows_data=ROWS_DATA, auth_session="test-sid"):
+    session = MagicMock()
+    session.get.side_effect = [
+        _response({"auth-session": auth_session}),  # AUTH_URL
+        _response({}),  # DOMAIN_URL
+    ]
+    session.post.return_value = _response(
+        {"integration": {"transformed": {"rows_data": rows_data}}}
     )
+    return session
 
 
-def test_icons_match_collection_types(collections):
+@pytest.fixture
+def source():
+    return midlothian_gov_uk.Source(uprn=TEST_UPRN, postcode=TEST_POSTCODE)
+
+
+@patch("waste_collection_schedule.source.midlothian_gov_uk.requests.Session")
+def test_fetch_returns_collections(mock_session_cls, source):
+    """Test that fetch returns a non-empty list of collections."""
+    mock_session_cls.return_value = _mock_session()
+    collections = source.fetch()
+    assert isinstance(collections, list)
+    assert len(collections) == 3
+
+
+@patch("waste_collection_schedule.source.midlothian_gov_uk.requests.Session")
+def test_collections_have_required_fields(mock_session_cls, source):
+    """Test that each collection has date, type, and icon fields."""
+    mock_session_cls.return_value = _mock_session()
+    for collection in source.fetch():
+        assert collection.date is not None
+        assert collection.type is not None
+        assert collection.icon is not None
+
+
+@patch("waste_collection_schedule.source.midlothian_gov_uk.requests.Session")
+def test_collection_dates_are_parsed(mock_session_cls, source):
+    """Test that the council's DD/MM/YYYY HH:MM:SS dates are parsed correctly."""
+    mock_session_cls.return_value = _mock_session()
+    collections = source.fetch()
+    dates_by_type = {c.type: c.date for c in collections}
+    assert dates_by_type["Food Collection Service"] == date(2026, 4, 27)
+    assert dates_by_type["Garden Collection Service"] == date(2026, 5, 4)
+
+
+@patch("waste_collection_schedule.source.midlothian_gov_uk.requests.Session")
+def test_icons_match_collection_types(mock_session_cls, source):
     """Test that icons are correctly mapped to their collection types."""
-    for collection in collections:
+    mock_session_cls.return_value = _mock_session()
+    for collection in source.fetch():
         expected_icon = midlothian_gov_uk.ICON_MAP.get(collection.type)
-        assert collection.icon == expected_icon, (
-            f"Icon mismatch for {collection.type}: expected {expected_icon}, got {collection.icon}"
-        )
+        assert collection.icon == expected_icon
 
 
 def test_source_initialization():
     """Test that Source class initializes correctly with UPRN and postcode."""
-    # Given
-    uprn = TEST_UPRN
-    postcode = TEST_POSTCODE
-
-    # When
-    source = midlothian_gov_uk.Source(uprn=uprn, postcode=postcode)
-
-    # Then
+    source = midlothian_gov_uk.Source(uprn=TEST_UPRN, postcode=TEST_POSTCODE)
     assert isinstance(source, midlothian_gov_uk.Source)
 
 
-def test_multiple_collections_returned(collections):
-    """Test that multiple collections are returned (typically multiple weeks/services)."""
-    assert len(collections) >= 2, (
-        f"Expected at least 2 collections, but got {len(collections)}"
-    )
+@patch("waste_collection_schedule.source.midlothian_gov_uk.requests.Session")
+def test_no_rows_raises_source_argument_not_found(mock_session_cls, source):
+    """An empty rows_data means the council returned no data for this address."""
+    from waste_collection_schedule.exceptions import SourceArgumentNotFound
+
+    mock_session_cls.return_value = _mock_session(rows_data={})
+    with pytest.raises(SourceArgumentNotFound):
+        source.fetch()
