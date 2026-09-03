@@ -16,7 +16,7 @@ TEST_CASES = {
 ICON_MAP = {
     "Black bin": Icons.GENERAL_WASTE,
     "Blue bin": Icons.RECYCLING,
-    "Brown bin": Icons.BIO_KITCHEN,
+    "Brown bin": Icons.GLASS,
     "Green bin": Icons.ORGANIC,
 }
 
