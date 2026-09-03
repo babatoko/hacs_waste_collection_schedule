@@ -2,12 +2,22 @@ import os
 import sys
 from datetime import date, timedelta
 
-# Insert repo root to sys.path for absolute imports to work
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from custom_components.waste_collection_schedule.waste_collection_schedule.source import (
-    darebin_vic_gov_au,
+# Put the core library on sys.path directly (matching test_source_components.py)
+# rather than importing through custom_components.waste_collection_schedule,
+# whose __init__ pulls in homeassistant just to reach this pure-python source.
+sys.path.insert(
+    0,
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "custom_components",
+            "waste_collection_schedule",
+        )
+    ),
 )
+
+from waste_collection_schedule.source import darebin_vic_gov_au
 
 
 class FixedDate(date):

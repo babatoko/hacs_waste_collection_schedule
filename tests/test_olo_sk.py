@@ -6,6 +6,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Other test files collected in the same pytest run may have already loaded
+# the real `waste_collection_schedule` package (and its submodules) before
+# this file runs. Save that state so it can be restored below instead of
+# being clobbered for the rest of the process.
+_prior_wcs_modules = {
+    name: mod
+    for name, mod in sys.modules.items()
+    if name == "waste_collection_schedule"
+    or name.startswith("waste_collection_schedule.")
+}
+
 # Mock the waste_collection_schedule module before importing olo_sk
 wcs = types.ModuleType("waste_collection_schedule")
 wcs.Collection = MagicMock  # type: ignore[attr-defined]
@@ -19,7 +30,13 @@ class SourceArgumentExceptionMultiple(Exception):
         super().__init__(f"Arguments required: {args} - {reason}")
 
 
+class SourceArgumentNotFound(Exception):
+    def __init__(self, argument, reason=None):
+        super().__init__(f"Argument not found: {argument} - {reason}")
+
+
 exceptions.SourceArgumentExceptionMultiple = SourceArgumentExceptionMultiple  # type: ignore[attr-defined]
+exceptions.SourceArgumentNotFound = SourceArgumentNotFound  # type: ignore[attr-defined]
 sys.modules["waste_collection_schedule.exceptions"] = exceptions
 
 # Insert source path to sys.path
@@ -38,6 +55,20 @@ sys.path.insert(
 
 # Now we can import the source module directly
 from source import olo_sk  # noqa: E402
+
+# The stub above only exists to satisfy olo_sk's own `import
+# waste_collection_schedule...` at import time. sys.modules is process-global
+# and outlives this file within a single pytest run, so put back whatever was
+# there before (the real package, if another test file already loaded it) and
+# drop only the stub entries this file itself introduced.
+for _name in list(sys.modules):
+    if _name == "waste_collection_schedule" or _name.startswith(
+        "waste_collection_schedule."
+    ):
+        if _name in _prior_wcs_modules:
+            sys.modules[_name] = _prior_wcs_modules[_name]
+        else:
+            del sys.modules[_name]
 
 
 class FixedDate(date):

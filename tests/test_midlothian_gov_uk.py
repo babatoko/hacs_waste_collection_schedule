@@ -1,12 +1,5 @@
 """
 Test for Midlothian Council waste collection source.
-
-Note: This test file is not auto-discovered by pytest due to pytest.ini configuration.
-To run this test specifically:
-    pytest tests/test_midlothian_gov_uk.py
-
-Or run it with the test function name:
-    pytest tests/test_midlothian_gov_uk.py::test_fetch_returns_collections
 """
 
 import os
@@ -15,11 +8,22 @@ from datetime import date
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from custom_components.waste_collection_schedule.waste_collection_schedule.source import (
-    midlothian_gov_uk,
+# Put the core library on sys.path directly (matching test_source_components.py)
+# rather than importing through custom_components.waste_collection_schedule,
+# whose __init__ pulls in homeassistant just to reach this pure-python source.
+sys.path.insert(
+    0,
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "custom_components",
+            "waste_collection_schedule",
+        )
+    ),
 )
+
+from waste_collection_schedule.source import midlothian_gov_uk
 
 # Test data
 TEST_UPRN = "120001401"

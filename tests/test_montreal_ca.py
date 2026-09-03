@@ -15,6 +15,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Other test files collected in the same pytest run may have already loaded
+# the real `waste_collection_schedule` package (and its submodules) before
+# this file runs. Save that state so it can be restored below instead of
+# being clobbered for the rest of the process.
+_prior_wcs_modules = {
+    name: mod
+    for name, mod in sys.modules.items()
+    if name == "waste_collection_schedule"
+    or name.startswith("waste_collection_schedule.")
+}
+
 wcs = types.ModuleType("waste_collection_schedule")
 
 
@@ -48,6 +59,20 @@ sys.path.insert(
 )
 
 from source import montreal_ca  # noqa: E402
+
+# The stubs above only exist to satisfy montreal_ca's own `import
+# waste_collection_schedule...` at import time. sys.modules is process-global
+# and outlives this file within a single pytest run, so put back whatever was
+# there before (the real package, if another test file already loaded it) and
+# drop only the stub entries this file itself introduced.
+for _name in list(sys.modules):
+    if _name == "waste_collection_schedule" or _name.startswith(
+        "waste_collection_schedule."
+    ):
+        if _name in _prior_wcs_modules:
+            sys.modules[_name] = _prior_wcs_modules[_name]
+        else:
+            del sys.modules[_name]
 
 # Anjou sector ANJ-1: seasonal ranges either side of a biweekly summer list.
 ANJ1_GREEN = " Collection days in 2026 :   \n  - Spring : from April 1 to May 27, every week on Wednesday  \n  -  Summer : June 10 and 24; July 8 and 22; August 5 and 19; September 2 and 16 (every two weeks on Wednesday)  - Autumn: from September 30 to November 25, every week on Wednesday  \n   \n Hours :  Take out containers between 7 p.m. the evening before and 7 a.m. the day of collection  \nContainers accepted : \n - Reusable rigid containers \n - Paper bags \n - Cardboard boxes\n *The use of plastic bags as containers is prohibited"
